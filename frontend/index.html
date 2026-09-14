@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>BondBoard // peer credit without a bank</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Special+Elite&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.9.0/ethers.umd.min.js"></script>
+<style>
+  /* ------------------------------------------------------------------
+     BondBoard — Zine / Risograph aesthetic
+     Palette: paper #f4efe4, magenta #e91e63, cyan #00bcd4, ink #111
+     ------------------------------------------------------------------ */
+  :root {
+    --paper: #f4efe4;
+    --ink: #111;
+    --mag: #e91e63;
+    --cyan: #00bcd4;
+    --mag-shift: 2px;
+    --cyan-shift: -2px;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Courier Prime', 'Special Elite', monospace;
+    font-size: 15px;
+    line-height: 1.5;
+    position: relative;
+  }
+  /* SVG grain overlay */
+  body::before {
+    content: "";
+    position: fixed; inset: 0;
+    pointer-events: none;
+    z-index: 100;
+    opacity: 0.18;
+    mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.2  0 0 0 0 0.15  0 0 0 0 0.1  0 0 0 0.6 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  }
+
+  /* Duo-tone wordmark w/ CMY misregistration */
+  .duotone {
+    position: relative;
+    display: inline-block;
+    font-family: 'Anton', 'Bebek Neue', 'Impact', sans-serif;
+    color: var(--ink);
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+  .duotone::before, .duotone::after {
+    content: attr(data-text);
+    position: absolute; top: 0; left: 0;
+    pointer-events: none;
+    mix-blend-mode: multiply;
+    opacity: 0.85;
+  }
+  .duotone::before { color: var(--mag); transform: translate(var(--mag-shift), 1px); }
+  .duotone::after  { color: var(--cyan); transform: translate(var(--cyan-shift), -1px); }
+
+  /* Stamped headline */
+  .stamp {
+    display: inline-block;
+    font-family: 'Anton', sans-serif;
+    text-transform: uppercase;
+    background: var(--ink);
+    color: var(--paper);
+    padding: 4px 12px 2px;
+    letter-spacing: 0.05em;
+    transform: rotate(-1.2deg);
+    box-shadow: 3px 3px 0 var(--mag);
+  }
+  .stamp.cyan { box-shadow: 3px 3px 0 var(--cyan); transform: rotate(0.8deg); }
+
+  /* Hero */
+  .hero {
+    padding: 60px 30px 40px;
+    max-width: 1100px;
+    margin: 0 auto;
+    position: relative;
+  }
+  .hero h1 {
+    font-family: 'Anton', sans-serif;
+    font-size: clamp(56px, 12vw, 168px);
+    line-height: 0.85;
+    margin: 20px 0 30px;
+    text-transform: uppercase;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+    text-shadow: 3px 3px 0 var(--mag), -3px -2px 0 var(--cyan);
+  }
+  .hero .kicker {
+    font-family: 'Special Elite', monospace;
+    font-size: 14px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    display: inline-block;
+    padding: 6px 10px;
+    background: var(--cyan);
+    color: var(--ink);
+    transform: rotate(-0.6deg);
+  }
+  .hero p.lead {
+    font-family: 'Special Elite', monospace;
+    font-size: 18px;
+    max-width: 640px;
+    margin: 20px 0;
+  }
+  .hero .cta {
+    display: inline-block;
+    margin-top: 20px;
+    padding: 10px 20px;
+    background: var(--ink);
+    color: var(--paper);
+    text-decoration: none;
+    font-family: 'Anton', sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    transform: rotate(0.7deg);
+    box-shadow: 4px 4px 0 var(--mag);
+    cursor: pointer;
+    border: none;
+    font-size: 20px;
+  }
+  .hero .cta:hover { box-shadow: 6px 6px 0 var(--cyan); }
+
+  /* Torn / perforated divider */
+  .divider {
+    width: 100%;
+    height: 24px;
+    margin: 30px 0;
+    background-image: radial-gradient(circle at 6px 12px, var(--ink) 2px, transparent 2.5px);
+    background-size: 20px 24px;
+    background-repeat: repeat-x;
+    opacity: 0.5;
+  }
+  .torn {
+    width: 100%; height: 18px;
+    background: var(--ink);
+    clip-path: polygon(0 0, 4% 100%, 8% 20%, 14% 100%, 20% 30%, 26% 100%, 33% 15%, 40% 100%, 47% 25%, 54% 100%, 61% 20%, 68% 100%, 75% 30%, 82% 100%, 89% 15%, 96% 100%, 100% 25%, 100% 0);
+  }
+
+  /* Manifesto */
+  .manifesto {
+    max-width: 900px;
+    margin: 40px auto;
+    padding: 30px;
+    background: var(--paper);
+    border: 2px solid var(--ink);
+    position: relative;
+    transform: rotate(-0.3deg);
+  }
+  .manifesto h2 {
+    font-family: 'Anton', sans-serif;
+    font-size: 42px;
+    text-transform: uppercase;
+    margin: 0 0 20px;
+    color: var(--mag);
+    text-shadow: -2px 2px 0 var(--cyan);
+  }
+  .manifesto ol { list-style: none; padding: 0; margin: 0; counter-reset: prin; }
+  .manifesto li {
+    counter-increment: prin;
+    padding: 12px 0 12px 60px;
+    position: relative;
+    font-family: 'Special Elite', monospace;
+    font-size: 17px;
+    border-bottom: 1px dashed var(--ink);
+  }
+  .manifesto li:last-child { border-bottom: none; }
+  .manifesto li::before {
+    content: counter(prin, decimal-leading-zero) ".";
+    position: absolute; left: 0; top: 12px;
+    font-family: 'Anton', sans-serif;
+    font-size: 32px;
+    color: var(--cyan);
+    text-shadow: 2px 1px 0 var(--mag);
+  }
+  .marginalia {
+    display: inline-block;
+    color: var(--mag);
+    font-family: 'Special Elite', monospace;
+    font-size: 13px;
+    transform: rotate(-3deg);
+    margin-left: 8px;
+    text-decoration: underline wavy var(--mag);
+  }
+  .strike { text-decoration: line-through; opacity: 0.6; }
+
+  /* App */
+  .app {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+  }
+  .topbar {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 20px 0 30px;
+    border-bottom: 2px solid var(--ink);
+    margin-bottom: 30px;
+    flex-wrap: wrap; gap: 15px;
+  }
+  .wordmark { font-size: 40px; }
+  .wallet-btn {
+    padding: 8px 18px;
+    background: var(--ink);
+    color: var(--paper);
+    border: none;
+    font-family: 'Anton', sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    font-size: 16px;
+    box-shadow: 3px 3px 0 var(--cyan);
+    transform: rotate(-0.6deg);
+  }
+  .wallet-btn:hover { box-shadow: 4px 4px 0 var(--mag); }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+    margin-bottom: 30px;
+  }
+  .stat {
+    background: var(--paper);
+    border: 2px solid var(--ink);
+    padding: 15px;
+    position: relative;
+  }
+  .stat::after {
+    content: ""; position: absolute; top: -4px; left: -4px; right: 4px; bottom: 4px;
+    border: 2px solid var(--mag);
+    z-index: -1;
+    opacity: 0.7;
+  }
+  .stat .label {
+    font-family: 'Special Elite', monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    opacity: 0.7;
+  }
+  .stat .val {
+    font-family: 'Anton', sans-serif;
+    font-size: 32px;
+    margin-top: 6px;
+    line-height: 1;
+  }
+
+  /* Tabs */
+  .tabs {
+    display: flex; gap: 0;
+    margin-bottom: 20px;
+    border-bottom: 2px solid var(--ink);
+  }
+  .tab {
+    padding: 10px 20px;
+    font-family: 'Anton', sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    background: transparent;
+    border: 2px solid var(--ink);
+    border-bottom: none;
+    cursor: pointer;
+    margin-right: 4px;
+    font-size: 16px;
+    color: var(--ink);
+    position: relative;
+    top: 2px;
+  }
+  .tab.active { background: var(--ink); color: var(--paper); }
+
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* Grid of bond cards */
+  .bond-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 22px;
+  }
+  .bond-card {
+    background: var(--paper);
+    border: 2px solid var(--ink);
+    padding: 18px;
+    position: relative;
+    clip-path: polygon(0 4px, 5px 0, calc(100% - 8px) 0, 100% 6px, 100% calc(100% - 5px), calc(100% - 4px) 100%, 6px 100%, 0 calc(100% - 7px));
+  }
+  .bond-card::before {
+    content: ""; position: absolute; top: 4px; left: 4px; right: -4px; bottom: -4px;
+    background: var(--cyan); z-index: -1;
+    clip-path: inherit;
+    opacity: 0.6;
+  }
+  .bond-card .head {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    margin-bottom: 12px;
+  }
+  .bond-id {
+    font-family: 'Anton', sans-serif;
+    font-size: 34px;
+    line-height: 1;
+    color: var(--mag);
+    text-shadow: 1px 1px 0 var(--ink);
+  }
+  .date-mark {
+    font-family: 'Special Elite', monospace;
+    font-size: 11px;
+    padding: 3px 6px;
+    border: 1px dashed var(--ink);
+    transform: rotate(2deg);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  .bond-card .row {
+    display: flex; justify-content: space-between;
+    padding: 4px 0;
+    font-family: 'Special Elite', monospace;
+    font-size: 13px;
+    border-bottom: 1px dotted rgba(0,0,0,0.3);
+  }
+  .bond-card .row strong { font-family: 'Anton', sans-serif; font-size: 16px; }
+  .apy {
+    font-family: 'Anton', sans-serif;
+    font-size: 22px;
+    color: var(--mag);
+    background: var(--paper);
+    padding: 2px 6px;
+    display: inline-block;
+    border: 2px solid var(--ink);
+    box-shadow: 2px 2px 0 var(--cyan);
+  }
+  .progress {
+    height: 14px;
+    background: var(--paper);
+    border: 2px solid var(--ink);
+    margin: 12px 0;
+    position: relative;
+    overflow: hidden;
+  }
+  .progress .fill {
+    height: 100%;
+    background: repeating-linear-gradient(45deg, var(--mag) 0 6px, var(--cyan) 6px 12px);
+  }
+  .rec {
+    margin-top: 10px;
+    padding: 6px 8px;
+    background: var(--paper);
+    border: 1px solid var(--ink);
+    font-family: 'Special Elite', monospace;
+    font-size: 11px;
+    letter-spacing: 0.05em;
+  }
+  .rec b { color: var(--mag); }
+  .status-pill {
+    display: inline-block;
+    padding: 2px 8px;
+    font-family: 'Anton', sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 12px;
+    background: var(--ink);
+    color: var(--paper);
+  }
+  .status-pill.open { background: var(--cyan); color: var(--ink); }
+  .status-pill.funded { background: var(--mag); color: var(--paper); }
+  .status-pill.active { background: var(--ink); color: var(--paper); }
+  .status-pill.repaid { background: #2e7d32; color: var(--paper); }
+  .status-pill.defaulted { background: #b71c1c; color: var(--paper); }
+  .status-pill.cancelled { background: #555; color: var(--paper); }
+
+  .btn {
+    display: inline-block;
+    padding: 6px 14px;
+    background: var(--ink);
+    color: var(--paper);
+    font-family: 'Anton', sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border: none;
+    cursor: pointer;
+    box-shadow: 2px 2px 0 var(--mag);
+    font-size: 14px;
+    margin-top: 8px;
+  }
+  .btn:hover { box-shadow: 3px 3px 0 var(--cyan); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn.cyan { box-shadow: 2px 2px 0 var(--cyan); }
+
+  .fund-row { display: flex; gap: 6px; margin-top: 8px; align-items: center; }
+  input[type=text], input[type=number], select {
+    font-family: 'Special Elite', monospace;
+    background: var(--paper);
+    border: 2px solid var(--ink);
+    padding: 6px 8px;
+    font-size: 14px;
+    width: 100%;
+  }
+  input[type=range] { width: 100%; }
+  label {
+    display: block;
+    font-family: 'Special Elite', monospace;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin: 10px 0 4px;
+  }
+
+  /* Issue form */
+  .issue-form {
+    background: var(--paper);
+    border: 2px solid var(--ink);
+    padding: 20px;
+    max-width: 720px;
+    margin-bottom: 30px;
+    position: relative;
+  }
+  .issue-form::before {
+    content: ""; position: absolute; top: 5px; left: 5px; right: -5px; bottom: -5px;
+    background: var(--mag); z-index: -1; opacity: 0.5;
+  }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 600px) { .form-grid { grid-template-columns: 1fr; } }
+  .live-box {
+    margin-top: 15px;
+    padding: 10px;
+    background: var(--ink);
+    color: var(--paper);
+    font-family: 'Anton', sans-serif;
+    font-size: 22px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .live-box span:last-child { color: var(--cyan); }
+
+  /* Toast */
+  .toast-wrap {
+    position: fixed; bottom: 20px; right: 20px; z-index: 200;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .toast {
+    background: var(--ink); color: var(--paper);
+    padding: 10px 16px;
+    font-family: 'Special Elite', monospace;
+    font-size: 13px;
+    box-shadow: 3px 3px 0 var(--mag);
+    max-width: 320px;
+    animation: slide 0.25s ease-out;
+  }
+  .toast.err { box-shadow: 3px 3px 0 var(--cyan); }
+  @keyframes slide { from { transform: translateX(30px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+  .empty {
+    padding: 40px;
+    text-align: center;
+    font-family: 'Special Elite', monospace;
+    border: 2px dashed var(--ink);
+    opacity: 0.7;
+  }
+
+  .asterisk {
+    display: inline-block;
+    color: var(--mag);
+    font-family: 'Anton', sans-serif;
+    font-size: 24px;
+    vertical-align: middle;
+  }
+
+  a { color: var(--ink); }
+</style>
+</head>
+<body>
+
+<!-- =========================== HERO =========================== -->
+<section class="hero">
+  <span class="kicker">Issue #001 &nbsp;//&nbsp; peer credit zine</span>
+  <h1>Issue.<br />Fund.<br />Repay.</h1>
+  <p class="lead">
+    BondBoard is a bulletin board for peer-issued fixed-rate bonds on BOT Chain.
+    Post collateral, name your coupon, borrow from the network. No bank. No credit score.
+    Just an on-chain promise and the metal it's backed by.
+  </p>
+  <button class="cta" onclick="document.getElementById('appSection').scrollIntoView({behavior:'smooth'})">Open the board &rarr;</button>
+</section>
+
+<div class="torn"></div>
+
+<!-- =========================== MANIFESTO =========================== -->
+<section class="manifesto">
+  <h2>Three principles <span class="asterisk">*</span></h2>
+  <ol>
+    <li>
+      Credit is a promise between people <span class="marginalia">not a favor from a teller</span>.
+      A bond is that promise, written in code, backed by BOT.
+    </li>
+    <li>
+      Risk is <span class="strike">hidden</span> visible.
+      Every issuer's repaid/defaulted record is stamped on the chain forever <span class="marginalia">no shredder</span>.
+    </li>
+    <li>
+      Collateral is not a formality &mdash; it is the entire recovery process.
+      Under-collateralize at your own peril <span class="marginalia">seriously</span>.
+    </li>
+  </ol>
+</section>
+
+<div class="divider"></div>
+
+<!-- =========================== APP =========================== -->
+<section class="app" id="appSection">
+  <div class="topbar">
+    <div class="wordmark duotone" data-text="BOND//BOARD">BOND//BOARD</div>
+    <button class="wallet-btn" id="walletBtn" onclick="connectWallet()">Connect Wallet</button>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="label">Bonds Issued</div><div class="val" id="statTotal">-</div></div>
+    <div class="stat"><div class="label">Value Funded (BOT)</div><div class="val" id="statValue">-</div></div>
+    <div class="stat"><div class="label">Your Positions</div><div class="val" id="statPositions">-</div></div>
+    <div class="stat"><div class="label">Your Issuances</div><div class="val" id="statIssued">-</div></div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="market" onclick="switchTab('market')">Marketplace</button>
+    <button class="tab" data-tab="issue" onclick="switchTab('issue')">Issue Bond</button>
+    <button class="tab" data-tab="positions" onclick="switchTab('positions')">My Positions</button>
+    <button class="tab" data-tab="issuances" onclick="switchTab('issuances')">My Issuances</button>
+  </div>
+
+  <!-- Marketplace -->
+  <div class="panel active" id="panel-market">
+    <span class="stamp">Open bonds</span>
+    <div class="bond-grid" id="marketGrid" style="margin-top:20px;"></div>
+  </div>
+
+  <!-- Issue -->
+  <div class="panel" id="panel-issue">
+    <span class="stamp cyan">Issue a new bond</span>
+    <div class="issue-form" style="margin-top:20px;">
+      <div class="form-grid">
+        <div>
+          <label>Principal (BOT)</label>
+          <input type="number" id="fPrincipal" min="0.01" step="0.01" value="10" oninput="recalc()" />
+        </div>
+        <div>
+          <label>Repay Amount (BOT)</label>
+          <input type="number" id="fRepay" min="0.01" step="0.01" value="11" oninput="recalc()" />
+        </div>
+        <div>
+          <label>Maturity</label>
+          <select id="fMaturity" onchange="recalc()">
+            <option value="7">7 days</option>
+            <option value="30" selected>30 days</option>
+            <option value="90">90 days</option>
+            <option value="180">180 days</option>
+            <option value="custom">Custom...</option>
+          </select>
+          <input type="number" id="fMaturityCustom" min="1" max="365" placeholder="days" style="margin-top:6px; display:none;" oninput="recalc()"/>
+        </div>
+        <div>
+          <label>Collateral <span id="fCollLabel">50</span>%</label>
+          <input type="range" id="fColl" min="10" max="100" value="50" oninput="recalc()" />
+        </div>
+      </div>
+      <div class="live-box">
+        <span>APY</span><span id="liveAPY">-</span>
+      </div>
+      <div class="live-box" style="background:var(--mag);">
+        <span>Collateral cost</span><span id="liveColl" style="color:var(--paper);">-</span>
+      </div>
+      <button class="btn" style="margin-top:15px; font-size:18px; padding:10px 20px;" onclick="issueBond()">Stamp &amp; Post &rarr;</button>
+    </div>
+  </div>
+
+  <!-- Positions -->
+  <div class="panel" id="panel-positions">
+    <span class="stamp">Your positions</span>
+    <div class="bond-grid" id="positionsGrid" style="margin-top:20px;"></div>
+  </div>
+
+  <!-- Issuances -->
+  <div class="panel" id="panel-issuances">
+    <span class="stamp cyan">Your issuances</span>
+    <div class="bond-grid" id="issuancesGrid" style="margin-top:20px;"></div>
+  </div>
+</section>
+
+<div class="toast-wrap" id="toasts"></div>
+
+<script>
+/* ============================================================
+   CONFIG — default TESTNET (chainId 968 / 0x3C8).
+   For MAINNET, swap the CHAIN block below (chainId 677 / 0x2A5).
+   ============================================================ */
+const CONTRACT_ADDRESS = "0x0000000000000000000000000000000000000000";
+
+// TESTNET
+const CHAIN = {
+  chainIdHex: "0x3C8",
+  chainIdDec: 968,
+  chainName: "BOT Chain Testnet",
+  rpcUrls: ["https://rpc.bohr.life"],
+  blockExplorerUrls: ["https://scan.bohr.life"],
+  nativeCurrency: { name: "BOT", symbol: "BOT", decimals: 18 },
+};
+/*  MAINNET — uncomment to switch:
+const CHAIN = {
+  chainIdHex: "0x2A5",
+  chainIdDec: 677,
+  chainName: "BOT Chain",
+  rpcUrls: ["https://rpc.botchain.ai"],
+  blockExplorerUrls: ["https://scan.botchain.ai"],
+  nativeCurrency: { name: "BOT", symbol: "BOT", decimals: 18 },
+};
+*/
+
+const ABI = [
+  "function issueBond(uint256 principal, uint256 repayAmount, uint256 maturitySecs, uint16 collateralBps) external payable returns (uint256)",
+  "function fundBond(uint256 bondId) external payable",
+  "function drawPrincipal(uint256 bondId) external",
+  "function repayBond(uint256 bondId) external payable",
+  "function claimRepayment(uint256 bondId) external",
+  "function seizeCollateral(uint256 bondId) external",
+  "function claimCollateral(uint256 bondId) external",
+  "function cancelBond(uint256 bondId) external",
+  "function getBond(uint256 bondId) view returns (address,uint256,uint256,uint256,uint256,uint256,uint256,uint8)",
+  "function getFunderShare(uint256 bondId, address funder) view returns (uint256)",
+  "function getFunders(uint256 bondId) view returns (address[])",
+  "function getIssuerHistory(address issuer) view returns (uint256[], uint256, uint256)",
+  "function getFunderPositions(address funder) view returns (uint256[])",
+  "function bondCount() view returns (uint256)",
+  "function defaultGraceSecs() view returns (uint256)",
+];
+
+const STATUS = ["Open","Funded","Active","Repaid","Defaulted","Cancelled"];
+
+let provider, signer, contract, userAddr, graceSecs = 7*24*3600;
+
+// ============ Wallet ============
+async function connectWallet() {
+  if (!window.ethereum) return toast("MetaMask not detected", true);
+  try {
+    provider = new ethers.BrowserProvider(window.ethereum);
+    await window.ethereum.request({ method: "eth_requestAccounts" });
+    await ensureChain();
+    signer = await provider.getSigner();
+    userAddr = await signer.getAddress();
+    contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+    document.getElementById("walletBtn").textContent = userAddr.slice(0,6) + "..." + userAddr.slice(-4);
+    toast("Wallet connected");
+    try { graceSecs = Number(await contract.defaultGraceSecs()); } catch(_) {}
+    await refreshAll();
+    window.ethereum.on("accountsChanged", () => window.location.reload());
+    window.ethereum.on("chainChanged", () => window.location.reload());
+  } catch (e) { toast(e.message || "connect failed", true); }
+}
+
+async function ensureChain() {
+  try {
+    await window.ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: CHAIN.chainIdHex }] });
+  } catch (e) {
+    if (e.code === 4902) {
+      await window.ethereum.request({ method: "wallet_addEthereumChain", params: [CHAIN] });
+    } else { throw e; }
+  }
+}
+
+// ============ Tabs ============
+function switchTab(t) {
+  document.querySelectorAll(".tab").forEach(el => el.classList.toggle("active", el.dataset.tab === t));
+  document.querySelectorAll(".panel").forEach(el => el.classList.remove("active"));
+  document.getElementById("panel-" + t).classList.add("active");
+  if (t === "positions") renderPositions();
+  if (t === "issuances") renderIssuances();
+}
+
+// ============ Issue form live calc ============
+function getMaturityDays() {
+  const s = document.getElementById("fMaturity").value;
+  if (s === "custom") return Number(document.getElementById("fMaturityCustom").value || 0);
+  return Number(s);
+}
+function recalc() {
+  const p = Number(document.getElementById("fPrincipal").value || 0);
+  const r = Number(document.getElementById("fRepay").value || 0);
+  const md = getMaturityDays();
+  const cbps = Number(document.getElementById("fColl").value || 0);
+  document.getElementById("fCollLabel").textContent = cbps;
+  const showCustom = document.getElementById("fMaturity").value === "custom";
+  document.getElementById("fMaturityCustom").style.display = showCustom ? "block" : "none";
+
+  let apy = "-";
+  if (p > 0 && r > p && md > 0) {
+    const y = ((r/p - 1) * (365/md) * 100);
+    apy = y.toFixed(2) + "%";
+  }
+  document.getElementById("liveAPY").textContent = apy;
+  document.getElementById("liveColl").textContent = (p * cbps / 100).toFixed(4) + " BOT";
+}
+
+// ============ Issue action ============
+async function issueBond() {
+  if (!contract) return toast("Connect wallet first", true);
+  const p = Number(document.getElementById("fPrincipal").value || 0);
+  const r = Number(document.getElementById("fRepay").value || 0);
+  const md = getMaturityDays();
+  const cbps = Number(document.getElementById("fColl").value || 0);
+  if (p <= 0 || r <= p) return toast("Repay must exceed principal", true);
+  if (md < 1 || md > 365) return toast("Maturity 1-365 days", true);
+  if (cbps < 10 || cbps > 100) return toast("Collateral 10-100%", true);
+  try {
+    const principal = ethers.parseEther(String(p));
+    const repay = ethers.parseEther(String(r));
+    const collateral = (principal * BigInt(cbps * 100)) / 10000n;
+    const tx = await contract.issueBond(principal, repay, md * 86400, cbps * 100, { value: collateral });
+    toast("Issuing... " + tx.hash.slice(0,10));
+    await tx.wait();
+    toast("Bond issued");
+    await refreshAll();
+    switchTab("market");
+  } catch (e) { toast(e.reason || e.message, true); }
+}
+
+// ============ Fund / actions ============
+async function fundBond(id, ethAmountStr) {
+  if (!contract) return toast("Connect wallet first", true);
+  try {
+    const v = ethers.parseEther(ethAmountStr);
+    const tx = await contract.fundBond(id, { value: v });
+    toast("Funding...");
+    await tx.wait();
+    toast("Funded #" + id);
+    await refreshAll();
+  } catch (e) { toast(e.reason || e.message, true); }
+}
+async function drawPrincipal(id) {
+  try { const tx = await contract.drawPrincipal(id); toast("Drawing..."); await tx.wait(); toast("Drawn"); await refreshAll(); }
+  catch (e) { toast(e.reason || e.message, true); }
+}
+async function repayBond(id, repayAmountWei) {
+  try { const tx = await contract.repayBond(id, { value: repayAmountWei }); toast("Repaying..."); await tx.wait(); toast("Repaid"); await refreshAll(); }
+  catch (e) { toast(e.reason || e.message, true); }
+}
+async function claimRepayment(id) {
+  try { const tx = await contract.claimRepayment(id); toast("Claiming..."); await tx.wait(); toast("Claimed"); await refreshAll(); }
+  catch (e) { toast(e.reason || e.message, true); }
+}
+async function claimCollateral(id) {
+  try { const tx = await contract.claimCollateral(id); toast("Claiming..."); await tx.wait(); toast("Claimed"); await refreshAll(); }
+  catch (e) { toast(e.reason || e.message, true); }
+}
+async function seizeCollateral(id) {
+  try { const tx = await contract.seizeCollateral(id); toast("Seizing..."); await tx.wait(); toast("Defaulted"); await refreshAll(); }
+  catch (e) { toast(e.reason || e.message, true); }
+}
+async function cancelBond(id) {
+  try { const tx = await contract.cancelBond(id); toast("Cancelling..."); await tx.wait(); toast("Cancelled"); await refreshAll(); }
+  catch (e) { toast(e.reason || e.message, true); }
+}
+
+// ============ Loading & rendering ============
+async function loadAllBonds() {
+  const n = Number(await contract.bondCount());
+  const out = [];
+  for (let i = 1; i <= n; i++) {
+    const b = await contract.getBond(i);
+    out.push({
+      id: i,
+      issuer: b[0],
+      principal: b[1],
+      repayAmount: b[2],
+      collateral: b[3],
+      fundedAmount: b[4],
+      issuedAt: Number(b[5]),
+      maturity: Number(b[6]),
+      status: Number(b[7]),
+    });
+  }
+  return out;
+}
+
+async function refreshAll() {
+  if (!contract) return;
+  const bonds = await loadAllBonds();
+  let totalFunded = 0n;
+  for (const b of bonds) totalFunded += b.fundedAmount;
+  document.getElementById("statTotal").textContent = bonds.length;
+  document.getElementById("statValue").textContent = Number(ethers.formatEther(totalFunded)).toFixed(2);
+  window.__bonds = bonds;
+
+  const myPos = bonds.filter(b => b.fundersCache?.includes(userAddr));
+  // count positions & issuances via calls
+  try {
+    const pos = await contract.getFunderPositions(userAddr);
+    document.getElementById("statPositions").textContent = pos.length;
+  } catch(_) { document.getElementById("statPositions").textContent = "0"; }
+  const mine = bonds.filter(b => b.issuer.toLowerCase() === userAddr.toLowerCase());
+  document.getElementById("statIssued").textContent = mine.length;
+
+  renderMarket();
+  renderPositions();
+  renderIssuances();
+}
+
+function issuerCacheKey(a) { return "hist_" + a.toLowerCase(); }
+async function issuerHistory(a) {
+  try {
+    const h = await contract.getIssuerHistory(a);
+    return { repaid: Number(h[1]), defaulted: Number(h[2]), total: h[0].length };
+  } catch(_) { return { repaid: 0, defaulted: 0, total: 0 }; }
+}
+
+function short(a) { return a.slice(0,6) + "..." + a.slice(-4); }
+function apyOf(b) {
+  const p = Number(ethers.formatEther(b.principal));
+  const r = Number(ethers.formatEther(b.repayAmount));
+  // maturitySecs field: before draw it's a duration, after it's an abs timestamp.
+  let days;
+  if (b.status === 0 || b.status === 1 || b.status === 5) {
+    days = b.maturity / 86400;
+  } else {
+    days = (b.maturity - b.issuedAt) / 86400;
+    if (days <= 0) days = b.maturity / 86400;
+  }
+  if (p <= 0 || days <= 0) return "-";
+  return ((r/p - 1) * (365/days) * 100).toFixed(2) + "%";
+}
+
+async function renderMarket() {
+  const grid = document.getElementById("marketGrid");
+  if (!window.__bonds) return;
+  const open = window.__bonds.filter(b => b.status === 0);
+  if (!open.length) { grid.innerHTML = '<div class="empty">No open bonds. Be first to issue.</div>'; return; }
+  grid.innerHTML = "";
+  for (const b of open) grid.appendChild(await bondCard(b, "market"));
+}
+async function renderPositions() {
+  const grid = document.getElementById("positionsGrid");
+  if (!window.__bonds || !userAddr) return;
+  const rows = [];
+  for (const b of window.__bonds) {
+    const s = await contract.getFunderShare(b.id, userAddr);
+    if (s > 0n) rows.push({...b, myShare: s});
+  }
+  if (!rows.length) { grid.innerHTML = '<div class="empty">You have no positions.</div>'; return; }
+  grid.innerHTML = "";
+  for (const b of rows) grid.appendChild(await bondCard(b, "positions"));
+}
+async function renderIssuances() {
+  const grid = document.getElementById("issuancesGrid");
+  if (!window.__bonds || !userAddr) return;
+  const rows = window.__bonds.filter(b => b.issuer.toLowerCase() === userAddr.toLowerCase());
+  if (!rows.length) { grid.innerHTML = '<div class="empty">You have not issued anything.</div>'; return; }
+  grid.innerHTML = "";
+  for (const b of rows) grid.appendChild(await bondCard(b, "issuances"));
+}
+
+async function bondCard(b, ctx) {
+  const el = document.createElement("div");
+  el.className = "bond-card";
+  const hist = await issuerHistory(b.issuer);
+  const pct = b.principal === 0n ? 0 : Number((b.fundedAmount * 10000n) / b.principal) / 100;
+  const stampCls = STATUS[b.status].toLowerCase();
+  const dt = new Date(b.issuedAt * 1000);
+  const dstr = dt.toISOString().slice(0,10);
+  const cbps = Number((b.collateral * 10000n) / (b.principal || 1n));
+  const collPct = (cbps / 100).toFixed(0);
+
+  let matLabel;
+  if (b.status === 2 || b.status === 3 || b.status === 4) {
+    matLabel = new Date(b.maturity * 1000).toISOString().slice(0,10);
+  } else {
+    matLabel = (b.maturity / 86400).toFixed(0) + "d";
+  }
+
+  el.innerHTML = `
+    <div class="head">
+      <div class="bond-id">#${String(b.id).padStart(3,'0')}</div>
+      <div>
+        <span class="status-pill ${stampCls}">${STATUS[b.status]}</span>
+        <div class="date-mark" style="margin-top:6px;">${dstr}</div>
+      </div>
+    </div>
+    <div class="row"><span>Issuer</span><strong>${short(b.issuer)}</strong></div>
+    <div class="row"><span>Principal</span><strong>${ethers.formatEther(b.principal)} BOT</strong></div>
+    <div class="row"><span>Repay</span><strong>${ethers.formatEther(b.repayAmount)} BOT</strong></div>
+    <div class="row"><span>Maturity</span><strong>${matLabel}</strong></div>
+    <div class="row"><span>Collateral</span><strong>${collPct}% (${Number(ethers.formatEther(b.collateral)).toFixed(3)})</strong></div>
+    <div class="row"><span>APY</span><span class="apy">${apyOf(b)}</span></div>
+    <div class="progress"><div class="fill" style="width:${Math.min(100,pct)}%"></div></div>
+    <div style="font-family:'Special Elite',monospace;font-size:11px;text-align:center;">${Number(ethers.formatEther(b.fundedAmount)).toFixed(3)} / ${Number(ethers.formatEther(b.principal)).toFixed(3)} BOT (${pct.toFixed(1)}%)</div>
+    <div class="rec">Issuer record: <b>${hist.repaid} repaid</b> / <b>${hist.defaulted} defaulted</b> (of ${hist.total})</div>
+    <div id="actions-${ctx}-${b.id}"></div>
+  `;
+  const act = el.querySelector(`#actions-${ctx}-${b.id}`);
+  buildActions(act, b, ctx);
+  return el;
+}
+
+function buildActions(host, b, ctx) {
+  host.innerHTML = "";
+  const now = Math.floor(Date.now()/1000);
+
+  if (ctx === "market" && b.status === 0) {
+    const remain = b.principal - b.fundedAmount;
+    const row = document.createElement("div");
+    row.className = "fund-row";
+    row.innerHTML = `<input type="number" step="0.01" min="0" placeholder="BOT" id="fund-${b.id}" value="${Number(ethers.formatEther(remain)).toFixed(4)}" />`;
+    const btn = document.createElement("button");
+    btn.className = "btn"; btn.textContent = "Fund";
+    btn.onclick = () => fundBond(b.id, document.getElementById(`fund-${b.id}`).value);
+    row.appendChild(btn);
+    host.appendChild(row);
+  }
+  if (ctx === "issuances") {
+    if (b.status === 0) {
+      const c = mkBtn("Cancel", () => cancelBond(b.id));
+      host.appendChild(c);
+    }
+    if (b.status === 1) {
+      host.appendChild(mkBtn("Draw Principal", () => drawPrincipal(b.id)));
+    }
+    if (b.status === 2) {
+      host.appendChild(mkBtn(`Repay ${ethers.formatEther(b.repayAmount)} BOT`, () => repayBond(b.id, b.repayAmount)));
+    }
+  }
+  if (ctx === "positions") {
+    if (b.status === 3) host.appendChild(mkBtn("Claim Repayment", () => claimRepayment(b.id)));
+    if (b.status === 4) host.appendChild(mkBtn("Claim Collateral", () => claimCollateral(b.id)));
+    if (b.status === 2 && now > b.maturity + graceSecs) {
+      host.appendChild(mkBtn("Seize (Default)", () => seizeCollateral(b.id)));
+    }
+  }
+  if (ctx === "market" && b.status === 2 && now > b.maturity + graceSecs) {
+    host.appendChild(mkBtn("Seize (Default)", () => seizeCollateral(b.id)));
+  }
+}
+function mkBtn(label, fn) {
+  const b = document.createElement("button");
+  b.className = "btn cyan"; b.textContent = label; b.onclick = fn;
+  return b;
+}
+
+// ============ Toast ============
+function toast(msg, err = false) {
+  const el = document.createElement("div");
+  el.className = "toast" + (err ? " err" : "");
+  el.textContent = msg;
+  document.getElementById("toasts").appendChild(el);
+  setTimeout(() => el.remove(), 4200);
+}
+
+// init
+recalc();
+</script>
+</body>
+</html>
